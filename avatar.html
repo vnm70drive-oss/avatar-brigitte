@@ -12,7 +12,6 @@
         #input { width: 100%; padding: 10px; }
         #output { height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
         button { padding: 10px; margin: 5px; }
-        .error { color: red; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -22,10 +21,8 @@
         </div>
         <div id="chat">
             <div id="output">Brigitte: ¡Hola, Vicente! ¿Qué tal ese solo de guitarra hoy?</div>
-            <div id="mic-status" class="error"></div>
             <input type="text" id="input" placeholder="Escribe o habla..." />
             <button onclick="sendText()">Enviar Texto</button>
-            <button onclick="requestMicPermission()">Solicitar Permiso Mic (Una Vez)</button>
             <button onclick="startVoice()">Hablar</button>
             <button onclick="stopVoice()">Parar Voz</button>
         </div>
@@ -35,11 +32,9 @@
         const output = document.getElementById('output');
         const input = document.getElementById('input');
         const video = document.getElementById('avatar-video');
-        const micStatus = document.getElementById('mic-status');
         let recognition;
         let synthesis = window.speechSynthesis;
         let isSpeaking = false;
-        let micPermissionGranted = false;
 
         // Simula respuesta de IA (en real, usa Grok API)
         function getResponse(userInput) {
@@ -73,24 +68,7 @@
             }, 500);
         }
 
-        async function requestMicPermission() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                stream.getTracks().forEach(track => track.stop()); // Libera inmediatamente
-                micPermissionGranted = true;
-                micStatus.textContent = '¡Mic OK! Ya no pedirá más.';
-                micStatus.style.color = 'green';
-            } catch (err) {
-                micStatus.textContent = 'Error: Permiso denegado. Ve a chrome://settings/content/microphone y permite.';
-                console.error('Mic error:', err);
-            }
-        }
-
         function startVoice() {
-            if (!micPermissionGranted) {
-                micStatus.textContent = '¡Ey! Solicita permiso primero con el botón.';
-                return;
-            }
             if (!('webkitSpeechRecognition' in window)) {
                 alert('¡Ey! Tu navegador no soporta voz. Usa Chrome.');
                 return;
@@ -98,6 +76,7 @@
             recognition = new webkitSpeechRecognition();
             recognition.lang = 'es-ES';
             recognition.interimResults = false;
+            recognition.continuous = false; // Evita aborts largos
             recognition.onresult = (e) => {
                 const transcript = e.results[0][0].transcript;
                 input.value = transcript;
@@ -105,8 +84,13 @@
             };
             recognition.onerror = (e) => {
                 console.error('Error voz:', e.error);
-                micStatus.textContent = 'Error en reconocimiento: ' + e.error;
+                if (e.error === 'aborted') {
+                    alert('¡Abortado! Reintenta: habla claro y sin pausas. ¿Mic OK?');
+                } else if (e.error === 'not-allowed') {
+                    alert('¡Mic denegado! Ve a chrome://settings/content/microphone y permite.');
+                }
             };
+            recognition.onend = () => { /* Auto-stop */ };
             recognition.start();
         }
 
